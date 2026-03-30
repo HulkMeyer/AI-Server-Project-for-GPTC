@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ai_platform}
+      POSTGRES_USER: ${POSTGRES_USER:-ai_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - /AI-CONTROLLER/apps/stack/volumes/postgres:/var/lib/postgresql/data
+      - /AI-CONTROLLER/logs/postgres:/var/log/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai_admin} -d ${POSTGRES_DB:-ai_platform}"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ai_admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ai_platform}
+      ENABLE_SIGNUP: "false"
+      OPENAI_API_BASE_URL: http://host.docker.internal:8001/v1
+      OPENAI_API_KEY: ${VLLM_API_KEY}
+      ENABLE_OPENAI_API: "true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3000:8080"
+    volumes:
+      - /AI-CONTROLLER/apps/stack/volumes/open-webui:/app/backend/data
+      - /AI-CONTROLLER/logs/webui:/app/backend/logs
+
+  caddy:
+    image: caddy:latest
+    container_name: ai-caddy
+    restart: unless-stopped
+    depends_on:
+      - open-webui
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /AI-CONTROLLER/apps/stack/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /AI-CONTROLLER/apps/stack/volumes/caddy_data:/data
+      - /AI-CONTROLLER/apps/stack/volumes/caddy_config:/config
+
+networks:
+  default:
+    name: ai_controller_net

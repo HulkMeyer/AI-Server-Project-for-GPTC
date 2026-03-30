@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  vllm-coder:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-coder
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      HF_HOME: /root/.cache/huggingface
+      HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
+      NVIDIA_VISIBLE_DEVICES: "0"
+      VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+    volumes:
+      - /AI-SERVER/models/official/qwen2_5_coder_32b:/models/qwen2_5_coder_32b:ro
+      - /AI-SERVER/logs/vllm:/AI-SERVER/logs/vllm
+      - /AI-SERVER/models/tokenizer-cache:/root/.cache/huggingface
+    command: >
+      --host 0.0.0.0
+      --port 8000
+      --model /models/qwen2_5_coder_32b
+      --served-model-name qwen2.5-coder-32b
+      --dtype bfloat16
+      --gpu-memory-utilization 0.90
+      --max-model-len 32768
+      --trust-remote-code
+      --api-key ${VLLM_API_KEY}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/models', timeout=5)\nPY"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+networks:
+  default:
+    name: ai_server_net

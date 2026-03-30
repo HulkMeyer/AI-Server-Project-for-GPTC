@@ -1,0 +1,7 @@
+# Replace ai.gptc.local with your internal DNS hostname
+ai.gptc.local {
+    encode gzip
+    reverse_proxy /api/dify/* localhost:5001
+    reverse_proxy /dify/* localhost:3001
+    reverse_proxy /* localhost:3000
+}

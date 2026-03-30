@@ -1,0 +1,65 @@
+version: "3.9"
+
+services:
+  tei-embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:latest
+    container_name: tei-embeddings
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    environment:
+      NVIDIA_VISIBLE_DEVICES: "3"
+    volumes:
+      - /AI-SERVER/models/official/bge_m3:/models/bge_m3:ro
+      - /AI-SERVER/logs/tei:/AI-SERVER/logs/tei
+    command: >
+      --model-id /models/bge_m3
+      --default-prompt-name query
+      --max-client-batch-size 32
+      --json-output
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request; urllib.request.urlopen('http://127.0.0.1:80/health', timeout=5)\nPY"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  tei-reranker:
+    image: ghcr.io/huggingface/text-embeddings-inference:latest
+    container_name: tei-reranker
+    restart: unless-stopped
+    ports:
+      - "8082:80"
+    environment:
+      NVIDIA_VISIBLE_DEVICES: "3"
+    volumes:
+      - /AI-SERVER/models/official/bge_reranker_v2_m3:/models/bge_reranker_v2_m3:ro
+      - /AI-SERVER/logs/tei:/AI-SERVER/logs/tei
+    command: >
+      --model-id /models/bge_reranker_v2_m3
+      --max-client-batch-size 16
+      --json-output
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request; urllib.request.urlopen('http://127.0.0.1:80/health', timeout=5)\nPY"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+networks:
+  default:
+    name: ai_server_net

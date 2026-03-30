@@ -1,0 +1,96 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: dify-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - /AI-CONTROLLER/apps/dify/volumes/redis:/data
+
+  weaviate:
+    image: semitechnologies/weaviate:1.26.4
+    container_name: dify-weaviate
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      QUERY_DEFAULTS_LIMIT: "25"
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: "none"
+      CLUSTER_HOSTNAME: "node1"
+    volumes:
+      - /AI-CONTROLLER/apps/dify/volumes/weaviate:/var/lib/weaviate
+
+  dify-api:
+    image: langgenius/dify-api:latest
+    container_name: dify-api
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - weaviate
+    env_file:
+      - /AI-CONTROLLER/apps/dify/.env
+    environment:
+      DB_HOST: host.docker.internal
+      DB_PORT: "5432"
+      DB_DATABASE: ${POSTGRES_DB:-ai_platform}
+      DB_USERNAME: ${POSTGRES_USER:-ai_admin}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      WEAVIATE_ENDPOINT: http://weaviate:8080
+      VECTOR_STORE: weaviate
+      STORAGE_TYPE: local
+      CONSOLE_API_URL: http://localhost:5001
+      SERVICE_API_URL: http://localhost:5001
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "5001:5001"
+    volumes:
+      - /AI-CONTROLLER/apps/dify/volumes/app_data:/app/api/storage
+
+  dify-worker:
+    image: langgenius/dify-api:latest
+    container_name: dify-worker
+    restart: unless-stopped
+    depends_on:
+      - dify-api
+    env_file:
+      - /AI-CONTROLLER/apps/dify/.env
+    environment:
+      MODE: worker
+      DB_HOST: host.docker.internal
+      DB_PORT: "5432"
+      DB_DATABASE: ${POSTGRES_DB:-ai_platform}
+      DB_USERNAME: ${POSTGRES_USER:-ai_admin}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      WEAVIATE_ENDPOINT: http://weaviate:8080
+      VECTOR_STORE: weaviate
+      STORAGE_TYPE: local
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - /AI-CONTROLLER/apps/dify/volumes/app_data:/app/api/storage
+
+  dify-web:
+    image: langgenius/dify-web:latest
+    container_name: dify-web
+    restart: unless-stopped
+    depends_on:
+      - dify-api
+    environment:
+      CONSOLE_API_URL: http://localhost:5001
+      APP_API_URL: http://localhost:5001
+    ports:
+      - "3001:3000"
+
+networks:
+  default:
+    name: ai_controller_net

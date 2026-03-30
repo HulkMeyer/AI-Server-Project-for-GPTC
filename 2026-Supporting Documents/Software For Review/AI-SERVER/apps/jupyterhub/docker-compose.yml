@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  jupyterhub:
+    image: jupyterhub/jupyterhub:latest
+    container_name: jupyterhub
+    restart: unless-stopped
+    ports:
+      - "8003:8000"
+    volumes:
+      - /AI-SERVER/apps/jupyterhub/jupyterhub_config.py:/srv/jupyterhub/jupyterhub_config.py:ro
+      - /AI-SERVER/data/datasets:/srv/datasets
+      - /AI-SERVER/projects:/srv/projects
+      - /AI-SERVER/logs/jupyterhub:/var/log/jupyterhub
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      DOCKER_JUPYTER_IMAGE: quay.io/jupyter/pytorch-notebook:latest
+      JUPYTERHUB_CRYPT_KEY: ${JUPYTERHUB_CRYPT_KEY}
+    command: >
+      jupyterhub -f /srv/jupyterhub/jupyterhub_config.py
+    networks:
+      - ai_server_net
+
+networks:
+  ai_server_net:
+    external: true
